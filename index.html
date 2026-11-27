@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>StreamFetch — Local Media Downloader</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col items-center justify-center p-6 font-sans">
+
+  <div class="w-full max-w-xl bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-2xl">
+    <!-- Header -->
+    <div class="flex items-center justify-between mb-6">
+      <div>
+        <h1 class="text-2xl font-bold tracking-tight text-white">StreamFetch</h1>
+        <p class="text-sm text-slate-400">Connected to Local Windows Backend</p>
+      </div>
+      <span id="server-status" class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-amber-500/10 text-amber-400 border border-amber-500/20">
+        Checking server...
+      </span>
+    </div>
+
+    <!-- URL Input Form -->
+    <form id="fetch-form" class="flex gap-2 mb-6">
+      <input
+        id="url-input"
+        type="url"
+        required
+        placeholder="Paste YouTube link here (https://www.youtube.com/watch?v=...)"
+        class="flex-1 bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+      />
+      <button
+        type="submit"
+        class="bg-indigo-600 hover:bg-indigo-500 text-white font-medium text-sm px-5 py-3 rounded-xl transition cursor-pointer"
+      >
+        Load Video
+      </button>
+    </form>
+
+    <!-- Error Message -->
+    <div id="error-box" class="hidden mb-4 p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-sm"></div>
+
+    <!-- Video Preview & Download Options -->
+    <div id="preview-card" class="hidden border-t border-slate-800 pt-6">
+      <div class="flex flex-col sm:flex-row gap-4 mb-6">
+        <img id="video-thumb" src="" alt="Thumbnail" class="w-full sm:w-44 h-28 object-cover rounded-xl bg-slate-800" />
+        <div class="flex-1 min-w-0">
+          <h2 id="video-title" class="font-semibold text-base text-white line-clamp-2 mb-1">Video Title</h2>
+          <p id="video-author" class="text-xs text-slate-400">Channel Name</p>
+        </div>
+      </div>
+
+      <!-- Real Download Triggers -->
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <button
+          onclick="startDownload('mp4')"
+          class="flex items-center justify-between bg-emerald-600 hover:bg-emerald-500 text-white font-medium text-sm px-4 py-3 rounded-xl transition cursor-pointer"
+        >
+          <span>Download MP4 (Video)</span>
+          <span class="text-xs bg-black/20 px-2 py-0.5 rounded">Best HD</span>
+        </button>
+
+        <button
+          onclick="startDownload('mp3')"
+          class="flex items-center justify-between bg-sky-600 hover:bg-sky-500 text-white font-medium text-sm px-4 py-3 rounded-xl transition cursor-pointer"
+        >
+          <span>Download MP3 (Audio)</span>
+          <span class="text-xs bg-black/20 px-2 py-0.5 rounded">192 kbps</span>
+        </button>
+      </div>
+
+      <p id="download-hint" class="hidden mt-4 text-xs text-center text-slate-400">
+        Processing video on your local server... Your browser download will start automatically in a few seconds.
+      </p>
+    </div>
+  </div>
+
+  <script>
+  // Replace const BACKEND_URL = "http://127.0.0.1:8000"; with:
+const BACKEND_URL = window.location.origin;
+    let currentVideoUrl = "";
+
+    // Check if local FastAPI backend is running
+    async function checkServer() {
+      const badge = document.getElementById("server-status");
+      try {
+        const res = await fetch(`${BACKEND_URL}/docs`);
+        if (res.ok) {
+          badge.textContent = "Backend Online";
+          badge.className = "inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20";
+        }
+      } catch {
+        badge.textContent = "Backend Offline";
+        badge.className = "inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-red-500/10 text-red-400 border border-red-500/20";
+      }
+    }
+    checkServer();
+
+    // Extract Video ID from standard, short, or Shorts links
+    function extractVideoId(url) {
+      const regex = /(?:youtube\.com\/(?:watch\?v=|shorts\/|embed\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/;
+      const match = url.match(regex);
+      return match ? match[1] : null;
+    }
+
+    // Fetch metadata via YouTube oEmbed
+    document.getElementById("fetch-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const input = document.getElementById("url-input").value.trim();
+      const errorBox = document.getElementById("error-box");
+      const previewCard = document.getElementById("preview-card");
+
+      errorBox.classList.add("hidden");
+      previewCard.classList.add("hidden");
+
+      const videoId = extractVideoId(input);
+      if (!videoId) {
+        errorBox.textContent = "Please enter a valid YouTube link.";
+        errorBox.classList.remove("hidden");
+        return;
+      }
+
+      currentVideoUrl = `https://www.youtube.com/watch?v=${videoId}`;
+
+      try {
+        const res = await fetch(`https://www.youtube.com/oembed?url=${encodeURIComponent(currentVideoUrl)}&format=json`);
+        if (!res.ok) throw new Error("Video not found or private.");
+        const data = await res.json();
+
+        document.getElementById("video-thumb").src = `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`;
+        document.getElementById("video-title").textContent = data.title;
+        document.getElementById("video-author").textContent = data.author_name;
+        previewCard.classList.remove("hidden");
+      } catch (err) {
+        errorBox.textContent = err.message;
+        errorBox.classList.remove("hidden");
+      }
+    });
+
+    // Trigger real file download from local Python backend
+    function startDownload(formatType) {
+      if (!currentVideoUrl) return;
+      document.getElementById("download-hint").classList.remove("hidden");
+      const downloadEndpoint = `${BACKEND_URL}/download?url=${encodeURIComponent(currentVideoUrl)}&format_type=${formatType}`;
+      window.location.href = downloadEndpoint;
+    }
+  </script>
+</body>
+</html>
