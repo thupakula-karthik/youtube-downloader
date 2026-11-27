@@ -14,12 +14,21 @@ def delete_file(path: str):
 def serve_home():
     return FileResponse("index.html")
 
+@app.get("/status")
+def status():
+    return {"cookies_found": os.path.exists("cookies.txt"), "yt_dlp_version": yt_dlp.version.__version__}
+
 @app.get("/download")
 def download_video(url: str, format_type: str = "mp4", background_tasks: BackgroundTasks = None):
     temp_dir = tempfile.mkdtemp()
     out = os.path.join(temp_dir, "%(title)s.%(ext)s")
-    opts = {"outtmpl": out, "quiet": True}
-    if os.path.exists("cookies.txt"): opts["cookiefile"] = "cookies.txt"
+    opts = {
+        "outtmpl": out,
+        "quiet": True,
+        "extractor_args": {"youtube": {"player_client": ["tv_simply", "web"]}},
+    }
+    if os.path.exists("cookies.txt"):
+        opts["cookiefile"] = "cookies.txt"
     if format_type == "mp3":
         opts.update({"format": "bestaudio/best", "postprocessors": [{"key": "FFmpegExtractAudio", "preferredcodec": "mp3", "preferredquality": "192"}]})
     else:
